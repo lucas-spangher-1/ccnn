@@ -34,10 +34,12 @@ class ModelReadyDataset(Dataset):
         len_aug: bool = False,
         seed: int = 42,
         len_aug_args: dict = {},
+        taus: dict = {},
     ):
         self.len_aug = len_aug
         self.len_aug_args = len_aug_args
         self.rand = random.Random(seed)
+        self.taus = taus
 
         self.xs = []
         self.ys = []
@@ -63,7 +65,10 @@ class ModelReadyDataset(Dataset):
             d = torch.tensor(shot_df[:shot_end])
 
             # test if the shot's length is between 25 and max_length
-            if 25 <= len(d) <= max_length:
+
+            # FYI JX changes this based on the machine... 
+
+            if 15 <= len(d) <= max_length:
                 self.xs.append(d)
                 self.ys.append(o)
                 self.metas.append(
@@ -116,9 +121,13 @@ class ModelReadyDataset(Dataset):
         """
         # for length augmentation, we clip up to
         x, y, len = self.xs[idx], self.ys[idx], self.metas[idx]["shot_len"]
+        m = self.machines[idx]
+        tau = self.taus[m]
+        # ?? does the length of the dataset change if len_aug is true?
 
         if self.len_aug:
-            x, y, len = length_augmentation(x, y, len, self.rand, **self.len_aug_args)
+            x, y, len = length_augmentation(
+                x, y, len, self.rand, tau **self.len_aug_args)
 
         assert x.shape[0] == len
         return x, y, len
@@ -178,94 +187,86 @@ def get_train_test_indices_from_Jinxiang_cases(
     """Get train and test indices for Jinxiang's cases.
 
     Args:
-        dataset (object): Data to split.
-        case_number (int): Case number.
+        dataset (object): Dictionary to split of form: {"label": int, "data": np.array, "machine": str}
+        case_number (int): Case number. 
+            Cases 1 - 12 refer to Jinxiang's cases
+            Case 13 is Francesco's case of only training and testing on non-disruptions. 
         new_machine (str): Name of the new machine.
 
     Returns:
         train_indices (list): List of indices for the training set.
         test_indices (list): List of indices for the testing set.
     """
-
-    rand = random.Random(seed)
-
     existing_machines = {"cmod", "d3d", "east"}
     existing_machines.remove(new_machine)
-
-    if case_number == 8:
-        # Take case8_percentage of the data from each machine for test,
-        # this ensures each machine has the same percentage of data in the test set
-        by_machine = {"cmod": set(), "d3d": set(), "east": set()}
-        test_indices = set()
-        for key, value in dataset.items():
-            by_machine[value["machine"]].add(key)
-        for _machine, inds in by_machine.items():
-            test_indices.update(
-                rand.sample(sorted(inds), int(case8_percentage * len(inds)))
-            )
-
-        train_indices = list(set(dataset.keys()) - test_indices)
-        rand.shuffle(train_indices)
-        return train_indices, list(test_indices)
-
-    # TODO: not case 8...
-
     train_indices = []
 
-    new_machine_indices = {"non_disruptive": [], "disruptive": []}
+    new_machine_indices = {
+        "non_disruptive": [],
+        "disruptive": []
+    }
+
+    new_machine_disruption_count = 0
 
     for key, value in dataset.items():
         if value["machine"] == new_machine:
+             # new machine non disruptions
             if value["label"] == 0:
                 new_machine_indices["non_disruptive"].append(key)
+                if case_number in {1, 2, 4, 5, 7, 8, 9, 13}:
+                    train_indices.append(key)
+                if case_number == 3:
+                    if random.random() < 0.5:
+                        train_indices.append(key)
+                if case_number in {10, 11, 12}:
+                    if random.random() < 0.33:
+                        train_indices.append(key)
             else:
+             # new machine disruptions
                 new_machine_indices["disruptive"].append(key)
-
+                if case_number in {7, 8, 9, 10, 11, 12}:
+                    # add all disruptions
+                    train_indices.append(key)
+               
+                if case_number in {1, 3, 4, 5}:
+                    # add 25 disruptions
+                    if new_machine_disruption_count < 25:
+                        train_indices.append(key)
+                        new_machine_disruption_count += 1
         elif value["machine"] in existing_machines:
-            if case_number in {4, 5, 6, 7, 8, 9, 10, 11, 12} and value["label"] == 0:
+            # existing non disruptions
+            if case_number in {5, 6, 8, 13} and value["label"] == 0:
                 train_indices.append(key)
-            if case_number in {1, 2, 3, 5, 6, 7, 8, 10, 12} and value["label"] == 1:
-                train_indices.append(key)
-            if case_number == 11 and value["label"] == 1:
-                train_indices.append(key)
+            if case_number == 11:
+                if random.random() < 0.2:
+                    train_indices.append(key)
+           
+           # existing disruptions
+            if case_number in {1, 2, 3, 5, 6, 7, 8, 10} and value["label"] == 1:
+               train_indices.append(key)
 
-    if case_number == 3:
-        half_size = len(train_indices) // 2
-        train_indices = train_indices[:half_size]
-    if case_number == 11:
-        fifth_size = len(train_indices) // 5
-        train_indices = train_indices[:fifth_size]
-
-    if case_number in {1, 2, 4, 5, 6, 8, 9, 10, 11, 12}:
-        train_indices.extend(new_machine_indices["non_disruptive"])
-
-    test_indices = rand.sample(
-        new_machine_indices["non_disruptive"],
-        len(new_machine_indices["non_disruptive"]) // 8,
-    )
-
-    if case_number in {1, 3, 4, 5, 7, 8, 9, 11, 12}:
-        if len(new_machine_indices["disruptive"]) > 40:
-            disruptive_samples = rand.sample(new_machine_indices["disruptive"], 40)
-            train_indices.extend(disruptive_samples[:20])
-            test_indices.extend(disruptive_samples[20:])
-        else:
-            train_indices.extend(rand.sample(new_machine_indices["disruptive"], 20))
-            test_indices.extend(
-                random.sample(
-                    new_machine_indices["disruptive"],
-                    len(new_machine_indices["disruptive"]) // 2,
-                )
-            )
-
-    rand.shuffle(train_indices)
+    random.shuffle(train_indices)
 
     # Create test set by sampling 20% of the new machine's shots
+    test_indices = random.sample(new_machine_indices["non_disruptive"], len(new_machine_indices["non_disruptive"]) // 6)
 
+    if case_number != 13:
+        test_indices.extend(random.sample(new_machine_indices["disruptive"], max(len(new_machine_indices["disruptive"]) // 6, 20)))
     # Remove test indices from training set if they were added earlier
+ 
     train_indices = [index for index in train_indices if index not in test_indices]
 
-    return train_indices, test_indices
+    # Counting the number of disruptive shots in the train set
+    train_disruptive_shots = sum(dataset[index]["label"] == 1 for index in train_indices)
+    train_non_disruptive_shots = sum(dataset[index]["label"] == 0 for index in train_indices)
+    print(f"Number of disruptive shots in the train set: {train_disruptive_shots}")
+    print(f"Number of non-disruptive shots in the train set: {train_non_disruptive_shots}")
+
+    # Counting the number of disruptive shots in the test set
+    test_disruptive_shots = sum(dataset[index]["label"] == 1 for index in test_indices)
+    test_non_disruptive_shots = sum(dataset[index]["label"] == 0 for index in test_indices)
+    print(f"Number of disruptive shots in the test set: {test_disruptive_shots}")
+    print(f"Number of non-disruptive shots in the test set: {test_non_disruptive_shots}")
 
 
 def get_class_weights(train_dataset):
@@ -300,6 +301,7 @@ def length_augmentation(
     x,
     y,
     len,
+    tau,
     rand: random.Random,
     tiny_clip_max_len=30,
     tiny_clip_prob=0.05,
@@ -307,6 +309,8 @@ def length_augmentation(
     disrupt_trim_prob=0.2,
     nondisr_cut_min=15,
     nondisr_cut_prob=0.3,
+    tau_trim_prob=0.2,
+    tau_trim_max=10,
 ):
     """Perform length augmentation clipping.
 
@@ -332,21 +336,33 @@ def length_augmentation(
         (x, y, len): the x, y, len to use
     """
     new_len = None
+
     if rand.random() < tiny_clip_prob:
         # sample len in [1, tiny_clip_max_len]
         new_len = math.ceil(rand.random() * tiny_clip_max_len)
         new_len = min(new_len, x.shape[0])
         return x[:new_len], torch.tensor(0), new_len
+    
     elif y == 1 and rand.random() < disrupt_trim_prob:
         # sample len in [len-disrupt_trim_max, len]
         new_len = len - math.floor(rand.random() * disrupt_trim_max)
         new_len = min(new_len, x.shape[0])
         return x[:new_len], y, new_len
+    
+    elif y == 1 and rand.random() < tau_trim_prob:
+        # sample len in [len-tau_trim_max, len]
+        new_len = len - math.floor(rand.random() * tau_trim_max)
+        new_len = min(new_len, x.shape[0])
+        if new_len < len - tau:
+            y = 0
+        return x[:new_len], y, new_len
+    
     elif y == 0 and rand.random() < nondisr_cut_prob:
         # sample len in [nondisr_cut_min, len]
         new_len = nondisr_cut_min + math.ceil((len - nondisr_cut_min) * rand.random())
         new_len = min(new_len, x.shape[0])
         return x[:new_len], y, new_len
+
     else:
         return x, y, len
 

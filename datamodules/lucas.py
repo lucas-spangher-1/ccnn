@@ -36,7 +36,7 @@ class LucasDataModule(pl.LightningDataModule):
     DataModule for Lucas' fusion dataset.
     """
 
-    DATA_FILENAME = "lucas_data_f32.pickle"
+    DATA_FILENAME = "/Users/cusg/Documents/MIT PSFC/projects/Disruption Prediction/hdl_improvement/Model_training/Full_HDL_dataset_unnormalized_no_nan_column_names_w_shot_and_time.pickle"
 
     # TODO: add sample rate here
     def __init__(
@@ -55,9 +55,10 @@ class LucasDataModule(pl.LightningDataModule):
         val_percent: float = 0.1,
         num_workers: int = 1,
         augment: bool = False,
-        debug: bool = False,
+        debug: bool = True,
         seed: int = 42,
         len_aug_args: dict = {},
+        taus: dict = {},
         **kwargs,
     ):
         super().__init__()
@@ -77,6 +78,7 @@ class LucasDataModule(pl.LightningDataModule):
         self.len_aug_args = len_aug_args
         self.debug = debug
         self.seed = seed
+        self.taus = taus
 
         if data_type != "default" and data_type != "sequence":
             raise ValueError(f"data_type {data_type} not supported.")
@@ -155,6 +157,7 @@ class LucasDataModule(pl.LightningDataModule):
             end_cutoff_timesteps=self.end_cutoff_timesteps,
             len_aug=self.augment,
             len_aug_args=self.len_aug_args,
+            taus=self.taus,
         )
         self.val_dataset = lucas_processing.ModelReadyDataset(
             shots=val_shots,

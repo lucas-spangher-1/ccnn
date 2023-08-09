@@ -176,7 +176,7 @@ class ResNet_sequence(ResNetBase):
         # First layers
         out = self.nonlinear(self.norm1(self.conv1(x)))
         # Blocks
-        out = self.blocks(out)
+        out = self.blocks(out) # S4 is in here. it's a seq model output. 
         # Final layer on last sequence element
         out = self.out_norm(out)
         return out
@@ -189,17 +189,17 @@ class ResNet_sequence(ResNetBase):
         for i in range(mask.shape[0]):
             mask[i, :, : lens[i]] = (
                 1 / lens[i]
-            )  # Sets the mask to 1/len for 0...len and 0 otherwise
+            )  # Sets the mask to 1/len for 0...len and 0 otherwise. <-- Wills code and this is how he masks. 
         out = mask * out
         out = out.sum(dim=-1, keepdim=True)
         # Pass through final projection layer, squeeze & return
         out = self.out_layer(out)
         return out.squeeze(-1)
 
-    def forward_unrolled(self, x, *args):
+    def forward_unrolled(self, x, *args): # this is how the disruption plots are 
         out = self.__blocks_normed(x)
-        out = torch.cumsum(out, dim=-1)
-        out = out / torch.arange(1, out.shape[-1] + 1, device=out.device)
+        out = torch.cumsum(out, dim=-1) # over the time. cumulative sum of all the model outputs so far. 
+        out = out / torch.arange(1, out.shape[-1] + 1, device=out.device) # computing a running average. length independent. 
         out = self.out_layer(out)
         return out.squeeze(-2)  # squeeze out channel dim
 
