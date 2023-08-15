@@ -81,6 +81,8 @@ class LucasDataModule(pl.LightningDataModule):
         self.seed = seed
         self.taus = taus
 
+        print(f"case_number: {case_number}")
+
         if data_type != "default" and data_type != "sequence":
             raise ValueError(f"data_type {data_type} not supported.")
 
