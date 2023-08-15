@@ -63,8 +63,8 @@ dataset:
   data_dir: 'data/'
   data_type: 'sequence'
   augment: True
-  case_number: 12
   params:
+    case_number: 12
     end_cutoff_timesteps: 8 # Used for Lucas' dataset. TODO: any additional args go here. 
     taus:
       cmod: 10
