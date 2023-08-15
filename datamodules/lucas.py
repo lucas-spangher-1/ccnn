@@ -13,12 +13,13 @@ from tqdm import tqdm
 import os
 
 
+# TODO: check output of collate fn is comparable to the output of my collate fn
+
 def collate_fn(batch):
     inputs, labels, lengths = zip(*batch)
     inputs = torch.nn.utils.rnn.pad_sequence(inputs, batch_first=True).transpose(1, 2)
     labels = torch.tensor(labels)
     return inputs, labels, lengths
-
 
 class StreamingProgressResponse:
     def __init__(self, response, progress):
@@ -136,14 +137,13 @@ class LucasDataModule(pl.LightningDataModule):
             dataset=data,
             case_number=self.case_number,
             new_machine=self.new_machine,
-            seed=self.seed,
         )
 
         if self.debug:
             train_inds = train_inds[:80]
             test_inds = test_inds[:20]
 
-        n_val = int(round(len(train_inds) * self.val_percent))
+        n_val = int(round(len(train_inds) * self.val_percent)) ## maybe cut these off the test set instead? 
 
         val_shots = [data[i] for i in train_inds[:n_val]]
         train_shots = [data[i] for i in train_inds[n_val:]]
@@ -165,6 +165,7 @@ class LucasDataModule(pl.LightningDataModule):
             machine_hyperparameters=self.machine_hyperparameters,
             end_cutoff=self.end_cutoff,
             end_cutoff_timesteps=self.end_cutoff_timesteps,
+            taus=self.taus,
         )
         self.test_dataset = lucas_processing.ModelReadyDataset(
             shots=test_shots,
@@ -172,6 +173,7 @@ class LucasDataModule(pl.LightningDataModule):
             machine_hyperparameters=self.machine_hyperparameters,
             end_cutoff=self.end_cutoff,
             end_cutoff_timesteps=self.end_cutoff_timesteps,
+            taus=self.taus,
         )
         # TODO: hardcode the scaler values in the future so we don't need to load
         # both train/test always
