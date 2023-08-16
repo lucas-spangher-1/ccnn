@@ -142,7 +142,7 @@ class LucasDataModule(pl.LightningDataModule):
         )
 
         if self.debug:
-            train_inds = train_inds[:80]
+            train_inds = train_inds[-80:]
             test_inds = test_inds[:20]
 
         n_val = int(round(len(train_inds) * self.val_percent)) ## maybe cut these off the test set instead? 
