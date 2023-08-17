@@ -56,6 +56,7 @@ class LucasDataModule(pl.LightningDataModule):
         num_workers: int = 1,
         augment: bool = False,
         debug: bool = True,
+        curriculum_learning: bool = False,
         seed: int = 42,
         len_aug_args: dict = {},
         taus: dict = {"cmod": 10, "d3d": 75, "east": 200},
@@ -79,6 +80,7 @@ class LucasDataModule(pl.LightningDataModule):
         self.debug = debug
         self.seed = seed
         self.taus = taus
+        self.curriculum_learning = curriculum_learning
 
         if data_type != "default" and data_type != "sequence":
             raise ValueError(f"data_type {data_type} not supported.")
@@ -139,7 +141,9 @@ class LucasDataModule(pl.LightningDataModule):
             seed=self.seed
         )
 
-        if self.debug:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        if self.debug and device.type == "cpu":
             train_inds = train_inds[-80:]
             test_inds = test_inds[:20]
 
