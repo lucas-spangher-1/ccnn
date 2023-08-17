@@ -36,7 +36,7 @@ class LucasDataModule(pl.LightningDataModule):
     DataModule for Lucas' fusion dataset.
     """
 
-    DATA_FILENAME = "/Users/cusg/Documents/MIT PSFC/projects/Disruption Prediction/hdl_improvement/Model_training/Full_HDL_dataset_unnormalized_no_nan_column_names_w_shot_and_time.pickle"
+    DATA_FILENAME = "ccnn_dataset.pickle"
 
     # TODO: add sample rate here
     def __init__(
@@ -136,6 +136,7 @@ class LucasDataModule(pl.LightningDataModule):
             dataset=data,
             case_number=self.case_number,
             new_machine=self.new_machine,
+            seed=self.seed
         )
 
         if self.debug:
@@ -158,7 +159,6 @@ class LucasDataModule(pl.LightningDataModule):
             machine_hyperparameters=self.machine_hyperparameters,
             end_cutoff=self.end_cutoff,
             end_cutoff_timesteps=self.end_cutoff_timesteps,
-            taus=self.taus,
             len_aug=self.augment,
             len_aug_args=self.len_aug_args,
             taus=self.taus,
