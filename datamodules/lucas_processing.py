@@ -6,6 +6,7 @@ from typing import List
 import math
 import pandas as pd 
 import random
+import collections
 
 
 class ModelReadyDataset(Dataset):
@@ -131,8 +132,48 @@ class ModelReadyDataset(Dataset):
         return x, y, length
 
 
+Inds = collections.namedtuple("Inds", ["existing", "new", "disr", "nondisr"])
+
+
+def get_index_sets(dataset, inds, new_machine):
+    """Looks through each index given in the dataset and generates the following sets
+        1. Existing machines: the indices of existing machines' shots
+        2. New machine: the indices of the new machine's shots
+        3. Disruptions: the indices of disruptions
+        4. Non-disruptions: the indices of non-disruptions
+    Args:
+        dataset: The dataset
+        inds: The indicies to look through in the dataset
+    """
+    existing_machines = {"cmod", "d3d", "east"}
+    existing_machines.remove(new_machine)
+
+    new, existing = set(), set()
+    disr, nondisr = set(), set()
+    for key in inds:
+        v = dataset[key]
+        if v["machine"] == new_machine:
+            new.add(key)
+        else:
+            existing.add(key)
+
+        if v["label"] == 0:
+            nondisr.add(key)
+        else:
+            disr.add(key)
+
+    assert len(existing & new) == 0, "Existing and new machines overlap"
+    assert len(disr & nondisr) == 0, "Disruptions and non-disr overlap"
+
+    assert len(existing | new) == len(inds)
+    assert len(disr | nondisr) == len(inds)
+
+    return Inds(existing, new, disr, nondisr)
+
+
 def get_train_test_indices_from_Jinxiang_cases(
-        dataset, case_number, new_machine, seed):
+    dataset, case_number, new_machine, seed, test_percentage=0.15
+) -> tuple[list, list]:
     """Get train and test indices for Jinxiang's cases.
 
     Args:
@@ -149,109 +190,70 @@ def get_train_test_indices_from_Jinxiang_cases(
 
     rand = random.Random(seed)
 
-    existing_machines = {"cmod", "d3d", "east"}
-    existing_machines.remove(new_machine)
-    train_indices = []
+    def take(inds, p=None, N=None):
+        assert p or N
+        N = math.ceil(p * len(inds)) if p else N
+        assert N is not None and N <= len(inds)
+        inds = list(inds)
+        rand.shuffle(inds)
+        return set(inds[:N])
 
-    new_machine_indices = {
-        "non_disruptive": [],
-        "disruptive": []
-    }
+    ix = get_index_sets(dataset, dataset.keys(), new_machine)
+    existing, new, disr, non_disr = (
+        ix.existing,
+        ix.new,
+        ix.disr,
+        ix.nondisr,
+    )
 
-    new_machine_disruption_count = 0
+    test_inds = take(new, p=test_percentage)
 
-    for key, value in dataset.items():
-        if value["machine"] == new_machine:
+    # remove test_inds from the other sets
+    for s in [new, existing, disr, non_disr]:
+        s.difference_update(test_inds)
 
-            # new machine non disruptions
-            if value["label"] == 0:
-                new_machine_indices["non_disruptive"].append(key)
-                if case_number in {1, 2, 4, 5, 7, 8, 9, 13}:
-                    train_indices.append(key)
-                if case_number == 3:
-                    if random.random() < 0.5:
-                        train_indices.append(key)
-                if case_number in {10, 11, 12}:
-                    if random.random() < 0.33:
-                        train_indices.append(key)
-            else:
-            # new machine disruptions
-                new_machine_indices["disruptive"].append(key)
-                if case_number in {7, 8, 9, 10, 11, 12}:
-                    # add all disruptions
-                    train_indices.append(key)
-                
-                if case_number in {1, 3, 4, 5}:
-                    # add 25 disruptions
-                    if new_machine_disruption_count < 25:
-                        train_indices.append(key)
-                        new_machine_disruption_count += 1
+    train_inds = set()
+    if case_number == 1:
+        train_inds = (existing & disr) | (new & non_disr) | (take(new & disr, N=20))
+    elif case_number == 2:
+        train_inds = (existing & disr) | (new & non_disr)
+    elif case_number == 3:
+        train_inds = (
+            (existing & disr) | take(new & non_disr, p=0.5) | take(new & disr, N=20)
+        )
+    elif case_number == 4:
+        train_inds = (new & non_disr) | take(new & disr, N=20)
+    elif case_number == 5:
+        train_inds = existing | (new & non_disr) | (take(new & disr, N=20))
+    elif case_number == 6:
+        train_inds = existing
+    elif case_number == 7:
+        train_inds = (existing & disr) | new
+    elif case_number == 8:
+        train_inds = existing | new
+    elif case_number == 9:
+        train_inds = new
+    elif case_number == 10:
+        train_inds = (existing & disr) | take(new & non_disr, p=0.33) | (new & disr)
+    elif case_number == 11:
+        train_inds = (
+            take(existing & non_disr, p=0.2)
+            | take(new & non_disr, p=0.33)
+            | (new & disr)
+        )
+    elif case_number == 12:
+        train_inds = take(new & non_disr, p=0.33) | (new & disr)
+    elif case_number == 14:  # Will's case 14 where everything is a 12.5% split
+        test_inds = take(dataset.keys(), p=0.125)
+        train_inds = set(dataset.keys()) - test_inds
+    else:
+        raise ValueError(f"Case {case_number} not supported")
 
-        elif value["machine"] in existing_machines:
-            # existing non disruptions
-            if case_number in {5, 6, 8, 13} and value["label"] == 0:
-                train_indices.append(key)
-            if case_number == 11:
-                if random.random() < 0.2:
-                    train_indices.append(key)
-            
-            # existing disruptions
-            if case_number in {1, 2, 3, 5, 6, 7, 8, 10} and value["label"] == 1:
-                train_indices.append(key)
-
-    rand.shuffle(train_indices)
-
-    # Create test set by sampling 20% of the new machine's shots
-    test_indices = rand.sample(new_machine_indices["non_disruptive"], len(new_machine_indices["non_disruptive"]) // 6)
-
-    if case_number != 13:
-        test_indices.extend(rand.sample(new_machine_indices["disruptive"], max(len(new_machine_indices["disruptive"]) // 6, 20)))
-
-    # Remove test indices from training set if they were added earlier
-    train_indices = [index for index in train_indices if index not in test_indices]
-
-    # Counting the number of disruptive shots in the train set
-    train_disruptive_shots = sum(dataset[index]["label"] == 1 for index in train_indices)
-    train_non_disruptive_shots = sum(dataset[index]["label"] == 0 for index in train_indices)
-    print(f"Number of disruptive shots in the train set: {train_disruptive_shots}")
-    print(f"Number of non-disruptive shots in the train set: {train_non_disruptive_shots}")
-
-    # Counting the number of disruptive shots in the test set
-    test_disruptive_shots = sum(dataset[index]["label"] == 1 for index in test_indices)
-    test_non_disruptive_shots = sum(dataset[index]["label"] == 0 for index in test_indices)
-    print(f"Number of disruptive shots in the test set: {test_disruptive_shots}")
-    print(f"Number of non-disruptive shots in the test set: {test_non_disruptive_shots}")
-
-
-    return train_indices, test_indices
-
-
-def get_class_weights(train_dataset):
-    """Get class weights for the training set.
-
-    Args:
-        train_dataset (object): Training set.
-
-    Returns:
-        class_weights (list): List of class weights.
-    """
-    class_counts = {}
-
-    for i in range(len(train_dataset)):
-        df = train_dataset[i]
-        label = int(df["labels"][0])
-        if label in class_counts.keys():
-            class_counts[label] += 1
-        else:
-            class_counts[label] = 1
-    class_weights = [
-        class_counts[key] / sum(class_counts.values()) for key in class_counts.keys()
-    ]
-
-    print("class weights: ")
-    print(class_weights)
-
-    return class_weights
+    assert len(test_inds & train_inds) == 0, "Test and train overlap"
+    train_inds, test_inds = list(train_inds), list(test_inds)
+    rand.shuffle(train_inds)
+    rand.shuffle(test_inds)
+    return train_inds, test_inds
 
 
 def length_augmentation(
