@@ -51,6 +51,7 @@ def main(
     )
     print(f"Wandb id is {wandb.run.id}")
 
+    print(f"Data dim is {cfg.net.data_dim}")
     # Before start training. Verify arguments in the cfg.
     verify_config(cfg)
 
@@ -86,6 +87,10 @@ def main(
         datamodule = construct_datamodule(cfg)
         datamodule.prepare_data()
         datamodule.setup()
+
+        print(f"Data dim is {datamodule.data_dim}")
+        datamodule.data_dim = cfg.net.data_dim
+        print(datamodule.train_dataset[0][0])
 
         # Append no of iteration to the cfg file for the definition of the schedulers
         distrib_batch_size = cfg.train.batch_size

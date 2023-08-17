@@ -13,7 +13,7 @@ net:
   no_hidden: 140
   no_blocks: 4
   no_stages: -1
-  data_dim: 0                    # Should be overridden automatically
+  data_dim: 1                    # Should be overridden automatically
   dropout: 0.0
   dropout_in: 0.0
   dropout_type: Dropout1d
