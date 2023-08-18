@@ -73,16 +73,14 @@ def main(
 
     # Construct data_module
 
-    if not cfg.dataset.params.curriculum_learning:
-        steps = 1
-        ec = [8]
+    if not cfg.dataset.params.state_pretraining:
+        pretraining_steps = 0
     else: 
-        steps = 4
-        ec = [2, 4, 6, 8]
+        pretraining_steps = 1 # can add more pretraining pretraining_steps, possibly
     
-    for i in range(steps):  
+    for i in range(pretraining_steps):  
         
-        cfg.dataset.params.end_cutoff_timesteps = ec[i]
+        cfg.dataset.params.model_type = "state"
 
         datamodule = construct_datamodule(cfg)
         datamodule.prepare_data()
@@ -164,6 +162,89 @@ def main(
             model.load_state_dict(
                 torch.load(checkpoint_callback.best_model_path)["state_dict"],
             )
+
+    cfg.dataset.params.model_type = "classification"
+
+    datamodule = construct_datamodule(cfg)
+    datamodule.prepare_data()
+    datamodule.setup()
+
+    print(f"Data dim is {datamodule.data_dim}")
+    datamodule.data_dim = cfg.net.data_dim
+    print(datamodule.train_dataset[0][0])
+
+    # Append no of iteration to the cfg file for the definition of the schedulers
+    distrib_batch_size = cfg.train.batch_size
+    if cfg.train.distributed:
+        distrib_batch_size *= cfg.train.avail_gpus
+    cfg.scheduler.iters_per_train_epoch = (
+        len(datamodule.train_dataset) // distrib_batch_size
+    )
+    cfg.scheduler.total_train_iters = (
+        cfg.scheduler.iters_per_train_epoch * cfg.train.epochs
+    )
+
+    # Construct model
+    model = construct_model(cfg, datamodule)
+
+    # Load checkpoint
+    if cfg.pretrained.load:
+        # Construct artifact path.
+        checkpoint_path = (
+            hydra.utils.get_original_cwd() + f"/artifacts/{cfg.pretrained.filename}"
+        )
+
+        # Load model from artifact
+        print(
+            f'IGNORE this validation run. Required due to problem with Lightning model loading \n {"#" * 200}'
+        )
+        trainer.validate(model, datamodule=datamodule)
+        print("#" * 200)
+        checkpoint_path += "/model.ckpt"
+        model = model.__class__.load_from_checkpoint(
+            checkpoint_path,
+            network=model.network,
+            cfg=cfg,
+        )
+
+    # Test before training
+    if cfg.test.before_train:
+        trainer.validate(model, datamodule=datamodule)
+        trainer.test(model, datamodule=datamodule)
+
+    # register hooks
+    if cfg.hooks_enabled:
+        model.configure_callbacks = partial(register_hooks, cfg, model)
+
+    # Train
+    if cfg.train.do:
+        if cfg.pretrained.load:
+            # From preloaded point
+            trainer.fit(model=model, datamodule=datamodule, ckpt_path=checkpoint_path)
+        else:
+            # Load from wand checkpoint
+            resume_ckpt = None
+            if cfg.train.resume_wandb and not cfg.offline:
+                wb = cfg.wandb
+                checkpoint_ref = f"model-{wb.run_id}:{cfg.train.resume_wandb}"
+                try:
+                    artifact_dir = wandb_logger.download_artifact(
+                        checkpoint_ref, artifact_type="model"
+                    )
+                    resume_ckpt = str(Path(artifact_dir) / "model.ckpt")
+                except Exception as e:
+                    print(e)
+                    print("No checkpoint found in wandb. Training from scratch.")
+
+            elif cfg.train.resume_local:
+                resume_ckpt = cfg.train.resume_local
+
+            trainer.fit(model=model, datamodule=datamodule, ckpt_path=resume_ckpt)
+
+        # Load state dict from best performing model
+        model.load_state_dict(
+            torch.load(checkpoint_callback.best_model_path)["state_dict"],
+        )
 
     # Validate and test before finishing
     model.eval()

@@ -6,6 +6,8 @@ from typing import List
 import math
 import pandas as pd 
 import random
+import numpy as np
+import copy
 
 
 class ModelReadyDataset(Dataset):
@@ -129,6 +131,87 @@ class ModelReadyDataset(Dataset):
 
         assert x.shape[0] == length
         return x, y, length
+
+
+class ModelReadyDatasetStatePretraining(ModelReadyDataset):
+    def __init__(
+        self,
+        shots: List,
+        inds: List,
+        end_cutoff,
+        end_cutoff_timesteps,
+        machine_hyperparameters,
+        taus,
+        max_length=2048,
+        len_aug: bool = False,
+        seed: int = 42,
+        len_aug_args: dict = {},):
+
+        self.inputs_embeds = []
+        self.labels = []
+        self.shot_inds = []
+        self.end_cutoff_timesteps = end_cutoff_timesteps
+        self.machine_hyperparameters = machine_hyperparameters
+        self.taus = taus
+        self.shots = []
+
+        self.max_length = max_length
+        self.num_disruptions = 0
+        self.machines = []
+        self.is_disruptive = []
+
+        self.len_aug = len_aug
+        self.len_aug_args = len_aug_args
+        self.rand = random.Random(seed)
+        self.taus = taus
+
+        self.xs = []
+        self.ys = []
+        self.metas = []
+        self.machines = []
+
+        for shot, ind in zip(shots, inds):
+            shot_df = shot["data"]
+            o = torch.tensor(
+                [shot["label"] * machine_hyperparameters[shot["machine"]]],
+                dtype=torch.float32,
+            )
+            
+            shot_end = int(len(shot_df) - end_cutoff_timesteps)
+
+            # test if shot_end is between 10 and max_length
+            if not 10 <= shot_end < max_length:
+                continue
+
+            if isinstance(shot_df, pd.DataFrame):
+                d = torch.tensor(shot_df[:shot_end].values, dtype=torch.float32)
+                d_target = torch.tensor(shot_df[1:shot_end].values, dtype=torch.float32)
+            elif isinstance(shot_df, np.ndarray):
+                d = torch.tensor(shot_df[:shot_end], dtype=torch.float32)
+                d_target = torch.tensor(shot_df[1:shot_end+1], dtype=torch.float32)
+            elif isinstance(shot_df, torch.tensor):
+                d = shot_df[:shot_end].clone().detach()
+                d_target = shot_df[1:shot_end].clone().detach()
+            else:
+                raise ValueError('Unknown data type for shot_df')
+
+            self.inputs_embeds.append(d)
+            self.labels.append(d_target)
+            self.machines.append(shot['machine'])
+            self.is_disruptive.append(int(np.round(shot['label'])))
+            self.shots.append(shot['shot'])
+            self.xs.append(d)
+            self.ys.append(o)
+            self.metas.append(
+                {
+                    "ind": ind,
+                    "shot_len": shot_end,
+                    "machine": shot["machine"],
+                }
+            )
+
+    def subselect_feature_columns(self):
+        self.labels = [x[:, [0, 1, 2, 4, 8, 9, 10, 11, 12]] for x in self.labels]
 
 
 def get_train_test_indices_from_Jinxiang_cases(

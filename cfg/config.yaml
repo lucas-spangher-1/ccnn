@@ -66,6 +66,7 @@ dataset:
   params:
     case_number: 12
     curriculum_learning: 0
+    state_pretraining: 1
     end_cutoff_timesteps: 8 # Used for Lucas' dataset. TODO: any additional args go here. 
     taus:
       cmod: 10

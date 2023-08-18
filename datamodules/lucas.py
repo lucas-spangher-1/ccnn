@@ -60,6 +60,8 @@ class LucasDataModule(pl.LightningDataModule):
         seed: int = 42,
         len_aug_args: dict = {},
         taus: dict = {"cmod": 10, "d3d": 75, "east": 200},
+        state_pretraining: bool = False,
+        model_type: str = "classification",
         **kwargs,
     ):
         super().__init__()
@@ -81,6 +83,8 @@ class LucasDataModule(pl.LightningDataModule):
         self.seed = seed
         self.taus = taus
         self.curriculum_learning = curriculum_learning
+        self.state_pretraining = state_pretraining
+        self.model_type = model_type
 
         if data_type != "default" and data_type != "sequence":
             raise ValueError(f"data_type {data_type} not supported.")
@@ -157,7 +161,12 @@ class LucasDataModule(pl.LightningDataModule):
         train_shots = [data[i] for i in train_inds[n_val:]]
         test_shots = [data[i] for i in test_inds]
 
-        self.train_dataset = lucas_processing.ModelReadyDataset(
+        if self.model_type == "state":
+            DatasetPlaceholder = lucas_processing.ModelReadyDatasetStatePretraining
+        else:
+            DatasetPlaceholder = lucas_processing.ModelReadyDataset
+
+        self.train_dataset = DatasetPlaceholder(
             shots=train_shots,
             inds=train_inds,
             machine_hyperparameters=self.machine_hyperparameters,
@@ -167,7 +176,7 @@ class LucasDataModule(pl.LightningDataModule):
             len_aug_args=self.len_aug_args,
             taus=self.taus,
         )
-        self.val_dataset = lucas_processing.ModelReadyDataset(
+        self.val_dataset = DatasetPlaceholder(
             shots=val_shots,
             inds=train_inds,
             machine_hyperparameters=self.machine_hyperparameters,
@@ -175,7 +184,7 @@ class LucasDataModule(pl.LightningDataModule):
             end_cutoff_timesteps=self.end_cutoff_timesteps,
             taus=self.taus,
         )
-        self.test_dataset = lucas_processing.ModelReadyDataset(
+        self.test_dataset = DatasetPlaceholder(
             shots=test_shots,
             inds=test_inds,
             machine_hyperparameters=self.machine_hyperparameters,
