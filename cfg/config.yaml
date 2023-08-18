@@ -65,7 +65,7 @@ dataset:
   augment: True
   params:
     case_number: 12
-    curriculum_learning: 0
+    curriculum_learning: 1
     end_cutoff_timesteps: 8 # Used for Lucas' dataset. TODO: any additional args go here. 
     taus:
       cmod: 10
@@ -90,7 +90,7 @@ dataset:
 train:
   do: True
   mixed_precision: False 
-  epochs: 210
+  epochs: 5
   batch_size: 50
   grad_clip: 0.0
   max_epochs_no_improvement: 40

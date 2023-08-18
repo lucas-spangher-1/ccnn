@@ -81,6 +81,10 @@ def main(
         ec = [2, 4, 6, 8]
     
     for i in range(steps):  
+
+        print("-----------------")
+        print(f"step {i} of {steps}")
+        print("-----------------")
         
         cfg.dataset.params.end_cutoff_timesteps = ec[i]
 
@@ -103,28 +107,29 @@ def main(
             cfg.scheduler.iters_per_train_epoch * cfg.train.epochs
         )
 
-        # Construct model
-        model = construct_model(cfg, datamodule)
+        if i == 0:
+            # Construct model
+            model = construct_model(cfg, datamodule)
 
-        # Load checkpoint
-        if cfg.pretrained.load:
-            # Construct artifact path.
-            checkpoint_path = (
-                hydra.utils.get_original_cwd() + f"/artifacts/{cfg.pretrained.filename}"
-            )
+            # Load checkpoint
+            if cfg.pretrained.load:
+                # Construct artifact path.
+                checkpoint_path = (
+                    hydra.utils.get_original_cwd() + f"/artifacts/{cfg.pretrained.filename}"
+                )
 
-            # Load model from artifact
-            print(
-                f'IGNORE this validation run. Required due to problem with Lightning model loading \n {"#" * 200}'
-            )
-            trainer.validate(model, datamodule=datamodule)
-            print("#" * 200)
-            checkpoint_path += "/model.ckpt"
-            model = model.__class__.load_from_checkpoint(
-                checkpoint_path,
-                network=model.network,
-                cfg=cfg,
-            )
+                # Load model from artifact
+                print(
+                    f'IGNORE this validation run. Required due to problem with Lightning model loading \n {"#" * 200}'
+                )
+                trainer.validate(model, datamodule=datamodule)
+                print("#" * 200)
+                checkpoint_path += "/model.ckpt"
+                model = model.__class__.load_from_checkpoint(
+                    checkpoint_path,
+                    network=model.network,
+                    cfg=cfg,
+                )
 
         # Test before training
         if cfg.test.before_train:
@@ -160,10 +165,10 @@ def main(
 
                 trainer.fit(model=model, datamodule=datamodule, ckpt_path=resume_ckpt)
 
-            # Load state dict from best performing model
-            model.load_state_dict(
-                torch.load(checkpoint_callback.best_model_path)["state_dict"],
-            )
+                # Load state dict from best performing model
+                model.load_state_dict(
+                    torch.load(checkpoint_callback.best_model_path)["state_dict"],
+                )
 
     # Validate and test before finishing
     model.eval()

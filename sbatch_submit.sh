@@ -14,13 +14,13 @@ source /home/software/anaconda3/2022.10/etc/profile.d/conda.sh
 conda activate will-env
 
 
-cd /home/spangher/ccnn
+# cd /home/spangher/ccnn
 . ./venv/bin/activate
 
 # Ignore the bogus local user packages on the host
 export PYTHONUSERBASE=intentionally-disabled
 # Run multiple instantiations of the WandB agent in parallel
-export WANDB_API_KEY=d38dd9743cf22de213611707a16c0ef5beb0ee83
+export WANDB_API_KEY=7385069f57b00860da0e7add0bdc6eba19fb07cd
 wandb agent "$1"
 
 # Deactivate your virtual environment
