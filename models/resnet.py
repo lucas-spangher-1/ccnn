@@ -204,7 +204,7 @@ class ResNet_sequence(ResNetBase):
     def forward_unrolled(self, x, *args): # this is how the disruption plots are 
         out = self.__blocks_normed(x)
         out = torch.cumsum(out, dim=-1) # over the time. cumulative sum of all the model outputs so far. 
-        out = out / torch.arange(1, out.shape[-1] + 1, device=out.device) # computing a running average. length independent. 
+        out = out / torch.arange(1, out.shape[-1] + 1,  device=out.device) # computing a running average. length independent. 
         out = self.out_layer(out) # dense 
         return out.squeeze(-2)  # squeeze out channel dim, B x 1 x T -> B x T
 

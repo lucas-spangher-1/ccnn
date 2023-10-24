@@ -128,30 +128,38 @@ class LucasDataModule(pl.LightningDataModule):
         # Load data from file
         f = open(os.path.join(self.data_dir, self.DATA_FILENAME), "rb")
         data = pickle.load(f)
+        self.original_data = data
 
-        (
-            train_inds,
-            test_inds,
-        ) = lucas_processing.get_train_test_indices_from_Jinxiang_cases(
-            dataset=data,
+        # (
+        #     train_inds,
+        #     test_inds,
+        # ) = lucas_processing.get_train_test_indices_from_Jinxiang_cases(
+        #     dataset=data,
+        #     case_number=self.case_number,
+        #     new_machine=self.new_machine,
+        #     seed=self.seed
+        # )
+
+        # if self.debug:
+        #     train_inds = train_inds[-80:]
+        #     test_inds = test_inds[:20]
+
+        # n_val = int(round(len(train_inds) * self.val_percent)) ## maybe cut these off the test set instead? 
+        # val_shots = [data[i] for i in train_inds[:n_val]]
+
+        train_inds, test_inds, val_inds = lucas_processing.train_test_val_inds_from_file(
             case_number=self.case_number,
-            new_machine=self.new_machine,
-            seed=self.seed
+            testing=self.debug
         )
-
-        if self.debug:
-            train_inds = train_inds[-80:]
-            test_inds = test_inds[:20]
-
-        n_val = int(round(len(train_inds) * self.val_percent)) ## maybe cut these off the test set instead? 
 
         # make sure there are no duplicate indices
         assert len(set(train_inds)) == len(train_inds)
         assert len(set(test_inds)) == len(test_inds)
-
-        val_shots = [data[i] for i in train_inds[:n_val]]
-        train_shots = [data[i] for i in train_inds[n_val:]]
+        train_shots = [data[i] for i in train_inds]
         test_shots = [data[i] for i in test_inds]
+        val_shots = [data[i] for i in val_inds]
+
+        self.test_inds = test_inds
 
         self.train_dataset = lucas_processing.ModelReadyDataset(
             shots=train_shots,
