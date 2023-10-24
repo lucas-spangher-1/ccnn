@@ -91,7 +91,7 @@ dataset:
 train:
   do: True
   mixed_precision: False 
-  epochs: 1 ## TODO: change back to 210 for real training 
+  epochs: 210 ## TODO: change back to 210 for real training 
   batch_size: 50
   grad_clip: 0.0
   max_epochs_no_improvement: 40
